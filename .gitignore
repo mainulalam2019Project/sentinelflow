@@ -1,0 +1,30 @@
+# ===== .NET build artifacts =====
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+artifacts/
+
+# ===== Next.js frontend =====
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# ===== env & secrets =====
+.env
+.env.local
+.env.production
+!.env.example
+frontend/.env
+frontend/.env.local
+
+# ===== logs =====
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db

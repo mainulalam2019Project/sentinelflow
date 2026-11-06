@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sentinel
+          POSTGRES_PASSWORD: sentinel
+          POSTGRES_DB: sentinelflow
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U sentinel" --health-interval 5s --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports: ["5672:5672"]
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      ConnectionStrings__Default: Host=localhost;Port=5432;Database=sentinelflow;Username=sentinel;Password=sentinel
+      RabbitMq__Host: localhost
+      Redis__ConnectionString: localhost:6379
+      Jwt__Key: ci-only-secret-key-32-chars-minimum!!!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore -c Release
+      - name: Test
+        run: dotnet test --no-build -c Release
+      - name: Docker build API
+        run: docker build -f src/SentinelFlow.Api/Dockerfile .
+      - name: Docker build Worker
+        run: docker build -f src/SentinelFlow.Worker/Dockerfile .
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build

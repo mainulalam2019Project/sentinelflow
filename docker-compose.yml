@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+      POSTGRES_DB: sentinelflow
+    ports: ["5433:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U sentinel"], interval: 5s, retries: 10 }
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports: ["5672:5672", "15672:15672"]
+  api:
+    build: { context: ., dockerfile: src/SentinelFlow.Api/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=sentinelflow;Username=sentinel;Password=sentinel
+      Jwt__Key: change-me-in-production-32-chars-minimum!
+      Jwt__Issuer: sentinelflow
+      Jwt__Audience: sentinelflow-clients
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: guest
+      RabbitMq__Password: guest
+      Redis__ConnectionString: redis:6379
+      Otlp__Endpoint: http://otel:4317
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      rabbitmq: { condition: service_started }
+  worker:
+    build: { context: ., dockerfile: src/SentinelFlow.Worker/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=sentinelflow;Username=sentinel;Password=sentinel
+      RabbitMq__Host: rabbitmq
+      RabbitMq__User: guest
+      RabbitMq__Password: guest
+      Redis__ConnectionString: redis:6379
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      rabbitmq: { condition: service_started }
+  frontend:
+    build: { context: ./frontend }
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports: ["3001:3001"]
+    depends_on: ["api"]
+  prometheus:
+    image: prom/prometheus:latest
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-otlp-receiver"]
+    ports: ["9090:9090"]
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml"]
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    environment: { GF_SECURITY_ADMIN_PASSWORD: admin }
+volumes:
+  pgdata:
